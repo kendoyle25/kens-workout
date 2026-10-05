@@ -192,6 +192,11 @@
   .lib-item-meta .chip { margin-right: 4px; }
   .lib-item-desc { font-size: 11px; color: var(--ink-faint); font-style: italic; margin-top: 3px; }
   .lib-item-count { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
+  .past-log-picker { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+  .past-log-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-faint); margin: 10px 0 4px; }
+  .past-log-group-title:first-child { margin-top: 2px; }
+  .past-log-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
+  .past-log-row input[type="checkbox"] { width: 17px; height: 17px; flex-shrink: 0; }
 
   .empty-note { color: var(--ink-faint); font-size: 13px; padding: 10px 0; }
 
@@ -456,7 +461,10 @@
 
   <!-- PAST WORKOUTS VIEW -->
   <section id="view-past" class="view">
-    <div class="card compact"><h2 class="section-title" style="margin:0;">Past Workouts</h2></div>
+    <div class="card compact page-head" style="margin-bottom:0;">
+      <h2 class="section-title" style="margin:0;">Past Workouts</h2>
+      <button id="logPastBtn" class="btn btn-sm">+ Log Past Workout</button>
+    </div>
     <div class="card"><div id="pastList"></div></div>
   </section>
 
@@ -563,6 +571,27 @@
   </div>
 </div>
 
+<!-- Log Past Workout modal -->
+<div id="pastLogBackdrop" class="modal-backdrop">
+  <div class="modal wide">
+    <h3>Log a Past Workout</h3>
+    <p class="modal-sub">For a workout you already did but didn't log at the time.</p>
+    <div class="modal-field">
+      <label>Date</label>
+      <input id="pastLogDate" type="date">
+    </div>
+    <div class="modal-field">
+      <label>Exercises done (tap to select, then add an optional note)</label>
+      <div id="pastLogPicker" class="past-log-picker"></div>
+    </div>
+    <div id="pastLogNotesWrap"></div>
+    <div class="modal-actions">
+      <button id="pastLogCancel" class="btn">Cancel</button>
+      <button id="pastLogSave" class="btn btn-primary">Save Workout</button>
+    </div>
+  </div>
+</div>
+
 <!-- Log another activity modal -->
 <div id="otherBackdrop" class="modal-backdrop">
   <div class="modal">
@@ -647,7 +676,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
   function freshMobilityDays() { return DEFAULT_MOBILITY_DAYS.map(function(label) { return { id: uid(), label: label, items: [] }; }); }
 
   function loadData() {
-    var fallback = { exercises: [], workouts: [], otherActivities: [], customMuscles: [], equipmentList: ["Dumbbell","Kettlebell"], mobilityDays: freshMobilityDays(), userName: "", nameOnboarded: false, themeColor: "Default Green", seeded: false };
+    var fallback = { exercises: [], workouts: [], otherActivities: [], customMuscles: [], equipmentList: ["Dumbbell","Kettlebell"], mobilityDays: freshMobilityDays(), userName: "", nameOnboarded: false, themeColor: "Default Green", seeded: false, currentWorkout: null };
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return fallback;
@@ -657,6 +686,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
       if (!parsed.otherActivities) parsed.otherActivities = [];
       if (!parsed.customMuscles) parsed.customMuscles = [];
       if (!parsed.equipmentList) parsed.equipmentList = ["Dumbbell","Kettlebell"];
+      if (typeof parsed.currentWorkout === "undefined") parsed.currentWorkout = null;
       if (typeof parsed.userName === "undefined") {
         parsed.userName = DEFAULT_USER_NAME || "";
         if (DEFAULT_USER_NAME) parsed.nameOnboarded = true;
@@ -1185,6 +1215,28 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
   }
   function canGenerate() { return CATEGORIES.every(function(cat) { return state.data.exercises.some(function(e) { return e.category === cat; }); }); }
   function buildCandidateSlots() { var slots = []; CATEGORIES.forEach(function(cat) { pickForCategory(cat, 2, []).forEach(function(ex) { slots.push({ category: cat, exercise: ex, marked: false }); }); }); return slots; }
+  function persistCurrentWorkout() {
+    if (!state.currentWorkout) { state.data.currentWorkout = null; }
+    else {
+      state.data.currentWorkout = {
+        slots: state.currentWorkout.slots.map(function(s) { return { category: s.category, exerciseId: s.exercise.id, marked: !!s.marked }; }),
+        expectedSeconds: state.currentWorkout.expectedSeconds
+      };
+    }
+    saveData();
+  }
+
+  function restoreCurrentWorkout() {
+    var saved = state.data.currentWorkout;
+    if (!saved || !saved.slots || !saved.slots.length) return;
+    var restoredSlots = saved.slots.map(function(s) {
+      var ex = state.data.exercises.find(function(e) { return e.id === s.exerciseId; });
+      return ex ? { category: s.category, exercise: ex, marked: !!s.marked } : null;
+    });
+    if (restoredSlots.indexOf(null) !== -1) { state.data.currentWorkout = null; saveData(); return; }
+    state.currentWorkout = { slots: restoredSlots, expectedSeconds: computeTotalSeconds(restoredSlots) };
+  }
+
   function generateWorkout() {
     var best = null, bestDiff = Infinity;
     for (var attempt = 0; attempt < GEN_ATTEMPTS; attempt++) {
@@ -1193,6 +1245,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
       if (diff / TARGET_SECONDS <= 0.05) { best = candidate; break; }
     }
     state.currentWorkout = { slots: best, expectedSeconds: computeTotalSeconds(best) };
+    persistCurrentWorkout();
     renderWorkout();
   }
   function regenerateChecked() {
@@ -1217,6 +1270,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     }
     best = best.map(function(slot) { return { category: slot.category, exercise: slot.exercise, marked: false }; });
     state.currentWorkout = { slots: best, expectedSeconds: computeTotalSeconds(best) };
+    persistCurrentWorkout();
     renderWorkout();
   }
   function mostRecentNote(ex) { if (!ex.notes || ex.notes.length===0) return null; return ex.notes[ex.notes.length-1]; }
@@ -1272,7 +1326,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     numWrap.appendChild(numEl); numWrap.appendChild(upBtn); numWrap.appendChild(downBtn);
 
     var check = document.createElement("input"); check.type = "checkbox"; check.className = "ex-check"; check.checked = slot.marked; check.title = "Mark to regenerate this one";
-    check.addEventListener("change", function() { slot.marked = check.checked; card.classList.toggle("marked", slot.marked); });
+    check.addEventListener("change", function() { slot.marked = check.checked; card.classList.toggle("marked", slot.marked); persistCurrentWorkout(); });
 
     var body = document.createElement("div"); body.className = "ex-body";
 
@@ -1310,6 +1364,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     Array.prototype.forEach.call(area.children, function(card) { prevRects[card.dataset.exid] = card.getBoundingClientRect(); });
 
     var tmp = slots[idx]; slots[idx] = slots[newIdx]; slots[newIdx] = tmp;
+    persistCurrentWorkout();
     renderWorkout();
 
     requestAnimationFrame(function() {
@@ -1372,6 +1427,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     notesBackdrop.classList.remove("active");
     pendingLog = null;
     state.currentWorkout = null;
+    persistCurrentWorkout();
     renderWorkout(); renderLibrary();
     openShareModal(workoutRecord, workoutSlots);
   });
@@ -1468,8 +1524,19 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     var canvas = document.getElementById("shareCanvas");
     var dataURL = canvas.toDataURL("image/png");
     var win = window.open();
-    if (win) { win.document.write('<title>Workout Image</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="' + dataURL + '" style="max-width:100%;height:auto;"></body>'); }
-    else {
+    if (win) {
+      win.document.write(
+        '<title>Workout Image</title>' +
+        '<body style="margin:0;background:#111;min-height:100vh;display:flex;flex-direction:column;align-items:center;">' +
+        '<div style="position:sticky;top:0;width:100%;display:flex;justify-content:center;padding:12px;background:#111;">' +
+        '<button onclick="window.close()" style="font:600 15px -apple-system,sans-serif;padding:10px 22px;border-radius:100px;border:none;background:#4ADE80;color:#0E1512;">Close &amp; Return to App</button>' +
+        '</div>' +
+        '<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:16px;width:100%;">' +
+        '<img src="' + dataURL + '" style="max-width:100%;height:auto;"></div>' +
+        '<p style="color:#9aa39d;font:12px -apple-system,sans-serif;text-align:center;padding:0 16px 20px;">Long-press (or right-click) the image to save it. Then tap the button above to come back.</p>' +
+        '</body>'
+      );
+    } else {
       var a = document.createElement("a"); a.download = "workout-" + Date.now() + ".png"; a.href = dataURL;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
@@ -1527,6 +1594,69 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
       item.appendChild(summary); item.appendChild(detail); list.appendChild(item);
     });
   }
+
+  // ---------- Log Past Workout (retroactive) ----------
+  var pastLogBackdrop = document.getElementById("pastLogBackdrop");
+  var pastLogPicker = document.getElementById("pastLogPicker");
+  var pastLogNotesWrap = document.getElementById("pastLogNotesWrap");
+  var pastLogDate = document.getElementById("pastLogDate");
+  var pastLogSelected = [];
+
+  function openPastLogModal() {
+    pastLogSelected = [];
+    pastLogDate.value = new Date().toISOString().slice(0, 10);
+    pastLogPicker.innerHTML = ""; pastLogNotesWrap.innerHTML = "";
+    CATEGORIES.forEach(function(cat) {
+      var items = state.data.exercises.filter(function(e) { return e.category === cat; }).sort(function(a, b) { return a.name.localeCompare(b.name); });
+      if (!items.length) return;
+      var title = document.createElement("div"); title.className = "past-log-group-title"; title.textContent = cat;
+      pastLogPicker.appendChild(title);
+      items.forEach(function(ex) {
+        var row = document.createElement("label"); row.className = "past-log-row";
+        var cb = document.createElement("input"); cb.type = "checkbox"; cb.value = ex.id;
+        cb.addEventListener("change", function() { renderPastLogNotes(); });
+        var span = document.createElement("span"); span.textContent = ex.name;
+        row.appendChild(cb); row.appendChild(span); pastLogPicker.appendChild(row);
+      });
+    });
+    pastLogBackdrop.classList.add("active");
+  }
+  function renderPastLogNotes() {
+    var checked = Array.prototype.slice.call(pastLogPicker.querySelectorAll("input[type=checkbox]:checked"));
+    pastLogNotesWrap.innerHTML = "";
+    checked.forEach(function(cb) {
+      var ex = state.data.exercises.find(function(e) { return e.id === cb.value; }); if (!ex) return;
+      var field = document.createElement("div"); field.className = "note-field";
+      var label = document.createElement("label"); label.textContent = ex.name;
+      var textarea = document.createElement("textarea"); textarea.placeholder = "Optional note (e.g. weight used, how it felt)..."; textarea.dataset.exId = ex.id;
+      field.appendChild(label); field.appendChild(textarea); pastLogNotesWrap.appendChild(field);
+    });
+  }
+  document.getElementById("logPastBtn").addEventListener("click", openPastLogModal);
+  document.getElementById("pastLogCancel").addEventListener("click", function() { pastLogBackdrop.classList.remove("active"); });
+  document.getElementById("pastLogSave").addEventListener("click", function() {
+    var checked = Array.prototype.slice.call(pastLogPicker.querySelectorAll("input[type=checkbox]:checked"));
+    if (checked.length === 0) { showAlert("Select at least one exercise."); return; }
+    if (!pastLogDate.value) { pastLogDate.focus(); return; }
+    var dateParts = pastLogDate.value.split("-");
+    var d = new Date(); d.setFullYear(parseInt(dateParts[0],10), parseInt(dateParts[1],10)-1, parseInt(dateParts[2],10));
+    d.setHours(12, 0, 0, 0); // midday, avoids timezone date-shift
+    var notesByExId = {};
+    pastLogNotesWrap.querySelectorAll("textarea").forEach(function(ta) { notesByExId[ta.dataset.exId] = ta.value.trim(); });
+    var workoutRecord = { id: uid(), dateISO: d.toISOString(), exercises: [], expectedDurationSeconds: null, actualDurationSeconds: null, exercisingSeconds: null, loggedRetroactively: true };
+    checked.forEach(function(cb, idx) {
+      var ex = state.data.exercises.find(function(e) { return e.id === cb.value; }); if (!ex) return;
+      ex.pickCount = (ex.pickCount||0) + 1; ex.lastPicked = d.toISOString();
+      var noteText = notesByExId[ex.id] || "";
+      if (noteText) ex.notes.push({ text: noteText, date: d.toISOString() });
+      workoutRecord.exercises.push({ exerciseId: ex.id, name: ex.name, category: ex.category, muscles: ex.muscles, order: idx+1, note: noteText || null });
+    });
+    state.data.workouts.push(workoutRecord);
+    saveData();
+    pastLogBackdrop.classList.remove("active");
+    renderPast(); renderLibrary(); renderStats();
+    showAlert("Workout logged for " + d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"}) + ".");
+  });
 
   // ---------- Mobility ----------
   var mobilityList = document.getElementById("mobilityList");
@@ -1655,8 +1785,27 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
       grid.appendChild(cell);
     }
   }
-  document.getElementById("calPrev").addEventListener("click", function() { state.calMonth--; if (state.calMonth < 0) { state.calMonth = 11; state.calYear--; } renderCalendar(); });
-  document.getElementById("calNext").addEventListener("click", function() { state.calMonth++; if (state.calMonth > 11) { state.calMonth = 0; state.calYear++; } renderCalendar(); });
+  function calGoPrev() { state.calMonth--; if (state.calMonth < 0) { state.calMonth = 11; state.calYear--; } renderCalendar(); }
+  function calGoNext() { state.calMonth++; if (state.calMonth > 11) { state.calMonth = 0; state.calYear++; } renderCalendar(); }
+  document.getElementById("calPrev").addEventListener("click", calGoPrev);
+  document.getElementById("calNext").addEventListener("click", calGoNext);
+
+  // Swipe left/right on the calendar grid to change months
+  (function() {
+    var calGridEl = document.getElementById("calGrid");
+    var touchStartX = null, touchStartY = null;
+    calGridEl.addEventListener("touchstart", function(e) {
+      if (e.touches.length !== 1) return;
+      touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    calGridEl.addEventListener("touchend", function(e) {
+      if (touchStartX === null) return;
+      var touch = e.changedTouches[0];
+      var dx = touch.clientX - touchStartX; var dy = touch.clientY - touchStartY;
+      touchStartX = null; touchStartY = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) calGoNext(); else calGoPrev(); }
+    }, { passive: true });
+  })();
 
   // ---------- Timer ----------
   var timerOverlay = document.getElementById("timerOverlay");
@@ -1684,6 +1833,31 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     } catch (e) { console.error(e); }
   }
 
+  // ---------- Audio cues (ding tones, replace spoken start/stop cues) ----------
+  var _toneCtx = null;
+  function getToneCtx() {
+    try {
+      if (!_toneCtx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; _toneCtx = new AC(); }
+      if (_toneCtx.state === "suspended") _toneCtx.resume();
+      return _toneCtx;
+    } catch (e) { return null; }
+  }
+  function playTone(freq, startAt, durationSec) {
+    var ctx = getToneCtx(); if (!ctx) return;
+    try {
+      var osc = ctx.createOscillator(); var gain = ctx.createGain();
+      osc.type = "sine"; osc.frequency.value = freq;
+      var t0 = ctx.currentTime + startAt;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + durationSec);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + durationSec + 0.02);
+    } catch (e) { console.error(e); }
+  }
+  function ding() { playTone(880, 0, 0.18); }
+  function dingding() { playTone(587, 0, 0.14); playTone(587, 0.18, 0.14); }
+
   function buildSegments(slots, equipRes) {
     var segments = [];
     segments.push({ type:"prestart", duration: PRESTART_SECONDS, setNum:1, exIdx:0, exerciseName: slots[0].exercise.name });
@@ -1710,16 +1884,16 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
   function startSegmentSpeech(seg) {
     switch (seg.type) {
       case "prestart": speak("First up: " + seg.exerciseName + "."); break;
-      case "go": speak("Start"); break;
-      case "switch": speak("Switch side"); break;
-      case "rest": speak("Next exercise is " + seg.nextName + "."); break;
-      case "setrest": speak("Set " + seg.setNum + " of " + SETS + " complete. Rest one minute. Next exercise is " + seg.nextName + "."); break;
+      case "go": ding(); break;
+      case "switch": dingding(); speak("Switch side"); break;
+      case "rest": dingding(); speak("Next exercise is " + seg.nextName + "."); break;
+      case "setrest": dingding(); speak("Set " + seg.setNum + " of " + SETS + " complete. Rest one minute. Next exercise is " + seg.nextName + "."); break;
       case "done": speak("Workout complete. Great job" + (state.data.userName ? ", " + state.data.userName : "") + "!"); break;
     }
   }
   function tickSpeech(seg, remaining) {
     if (seg.type==="prestart") { if (remaining<=5 && remaining>=1) speak(String(remaining)); return; }
-    if (seg.type==="go") { if (seg.duration>=40 && remaining===30) speak("30 seconds left"); if (seg.duration>=15 && remaining===10) speak("10 seconds left"); if (remaining<=3 && remaining>=1) speak(String(remaining)); return; }
+    if (seg.type==="go") { if (seg.duration>=30 && remaining===20) speak("20 seconds left"); if (seg.duration>=15 && remaining===10) speak("10 seconds left"); if (remaining<=3 && remaining>=1) speak(String(remaining)); return; }
     if (seg.type==="switch") { if (remaining<=Math.min(3,seg.duration) && remaining>=1) speak(String(remaining)); return; }
     if (seg.type==="rest") { if (remaining===10) speak("10 seconds left"); if (remaining<=5 && remaining>=1) speak(String(remaining)); return; }
     if (seg.type==="setrest") { if (remaining===10) speak("10 seconds left"); if (remaining<=5 && remaining>=1) speak(String(remaining)); return; }
@@ -1748,6 +1922,24 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     return upcoming;
   }
 
+  // ---------- Screen Wake Lock (keeps the screen on during a workout) ----------
+  var wakeLockSentinel = null;
+  function requestWakeLock() {
+    try {
+      if (!("wakeLock" in navigator)) return;
+      navigator.wakeLock.request("screen").then(function(sentinel) {
+        wakeLockSentinel = sentinel;
+        sentinel.addEventListener("release", function() { wakeLockSentinel = null; });
+      }).catch(function(e) { console.error(e); });
+    } catch (e) { console.error(e); }
+  }
+  function releaseWakeLock() {
+    try { if (wakeLockSentinel) { wakeLockSentinel.release(); wakeLockSentinel = null; } } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "visible" && state.timer && !wakeLockSentinel) requestWakeLock();
+  });
+
   function startTimer() {
     if (!state.currentWorkout) return;
     var equipRes = resolveWorkoutEquipment(state.currentWorkout.slots);
@@ -1759,6 +1951,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     renderTimerFrame();
     startSegmentSpeech(segments[0]);
     timer.intervalId = setInterval(tick, 1000);
+    requestWakeLock();
   }
   function tick() {
     var timer = state.timer; if (!timer || timer.paused) return;
@@ -1789,6 +1982,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
   function finishTimer() {
     var timer = state.timer;
     if (timer && timer.intervalId) clearInterval(timer.intervalId);
+    releaseWakeLock();
     var actualSeconds = timer ? Math.round((Date.now() - timer.startTimestamp) / 1000) : null;
     setTimeout(function() {
       timerOverlay.classList.remove("active"); state.timer = null;
@@ -1801,6 +1995,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
     showConfirm("Finish the workout now? You can still log what you completed.", function() {
       var timer = state.timer;
       if (timer && timer.intervalId) clearInterval(timer.intervalId);
+      releaseWakeLock();
       try { window.speechSynthesis.cancel(); } catch (e) {}
       var actualSeconds = timer ? Math.round((Date.now() - timer.startTimestamp) / 1000) : null;
       timerOverlay.classList.remove("active"); state.timer = null;
@@ -1847,6 +2042,7 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
 
   // ---------- init ----------
   resetForm();
+  restoreCurrentWorkout();
   renderGenerateGate();
   setView("generate");
 })();
