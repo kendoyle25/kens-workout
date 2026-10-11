@@ -1434,46 +1434,115 @@ var MOBILITY_SEED = {"1": [{"name": "Copenhagen Plank", "dosage": "Single leg - 
 
   // ---------- Share modal ----------
   var ZONES_FRONT = [
-    { muscle: "chest", cx: 100, cy: 88, rx: 30, ry: 22 },
-    { muscle: "shoulders", cx: 57, cy: 55, rx: 17, ry: 13 }, { muscle: "shoulders", cx: 143, cy: 55, rx: 17, ry: 13 },
-    { muscle: "biceps", cx: 41, cy: 92, rx: 11, ry: 26 }, { muscle: "biceps", cx: 159, cy: 92, rx: 11, ry: 26 },
-    { muscle: "forearms", cx: 36, cy: 144, rx: 10, ry: 22 }, { muscle: "forearms", cx: 164, cy: 144, rx: 10, ry: 22 },
-    { muscle: "abs (upper)", cx: 100, cy: 128, rx: 24, ry: 16 }, { muscle: "abs (lower)", cx: 100, cy: 158, rx: 22, ry: 15 },
-    { muscle: "obliques", cx: 68, cy: 140, rx: 8, ry: 28 }, { muscle: "obliques", cx: 132, cy: 140, rx: 8, ry: 28 },
-    { muscle: "hip flexors", cx: 100, cy: 186, rx: 26, ry: 10 },
-    { muscle: "quads", cx: 80, cy: 232, rx: 16, ry: 38 }, { muscle: "quads", cx: 120, cy: 232, rx: 16, ry: 38 }
+    { muscle: "chest", cx: 100, cy: 86, rx: 28, ry: 20 },
+    { muscle: "shoulders", cx: 60, cy: 58, rx: 15, ry: 14 }, { muscle: "shoulders", cx: 140, cy: 58, rx: 15, ry: 14 },
+    { muscle: "biceps", cx: 46, cy: 100, rx: 11, ry: 24 }, { muscle: "biceps", cx: 154, cy: 100, rx: 11, ry: 24 },
+    { muscle: "forearms", cx: 40, cy: 150, rx: 9, ry: 22 }, { muscle: "forearms", cx: 160, cy: 150, rx: 9, ry: 22 },
+    { muscle: "abs (upper)", cx: 100, cy: 124, rx: 22, ry: 15 }, { muscle: "abs (lower)", cx: 100, cy: 152, rx: 20, ry: 14 },
+    { muscle: "obliques", cx: 72, cy: 136, rx: 8, ry: 26 }, { muscle: "obliques", cx: 128, cy: 136, rx: 8, ry: 26 },
+    { muscle: "hip flexors", cx: 100, cy: 180, rx: 24, ry: 9 },
+    { muscle: "quads", cx: 82, cy: 228, rx: 15, ry: 38 }, { muscle: "quads", cx: 118, cy: 228, rx: 15, ry: 38 }
   ];
   var ZONES_BACK = [
-    { muscle: "upper back", cx: 100, cy: 62, rx: 26, ry: 15 },
-    { muscle: "back", cx: 100, cy: 100, rx: 32, ry: 28 }, { muscle: "lats", cx: 100, cy: 100, rx: 32, ry: 28 },
-    { muscle: "triceps", cx: 41, cy: 92, rx: 11, ry: 26 }, { muscle: "triceps", cx: 159, cy: 92, rx: 11, ry: 26 },
-    { muscle: "glutes", cx: 100, cy: 196, rx: 30, ry: 18 },
-    { muscle: "hamstrings", cx: 80, cy: 240, rx: 16, ry: 32 }, { muscle: "hamstrings", cx: 120, cy: 240, rx: 16, ry: 32 },
-    { muscle: "calves", cx: 80, cy: 290, rx: 14, ry: 26 }, { muscle: "calves", cx: 120, cy: 290, rx: 14, ry: 26 }
+    { muscle: "shoulders", cx: 60, cy: 58, rx: 15, ry: 14 }, { muscle: "shoulders", cx: 140, cy: 58, rx: 15, ry: 14 },
+    { muscle: "upper back", cx: 100, cy: 68, rx: 28, ry: 16 },
+    { muscle: "back", cx: 100, cy: 104, rx: 30, ry: 26 }, { muscle: "lats", cx: 100, cy: 104, rx: 30, ry: 26 },
+    { muscle: "triceps", cx: 46, cy: 100, rx: 11, ry: 24 }, { muscle: "triceps", cx: 154, cy: 100, rx: 11, ry: 24 },
+    { muscle: "glutes", cx: 100, cy: 192, rx: 28, ry: 17 },
+    { muscle: "hamstrings", cx: 82, cy: 234, rx: 15, ry: 32 }, { muscle: "hamstrings", cx: 118, cy: 234, rx: 15, ry: 32 },
+    { muscle: "calves", cx: 82, cy: 284, rx: 13, ry: 24 }, { muscle: "calves", cx: 118, cy: 284, rx: 13, ry: 24 }
   ];
+
+  // Builds one realistic-proportioned figure: head, neck, torso (tapered waist),
+  // separated arms (upper arm + forearm) and separated legs, as several closed
+  // subpaths in a single Path2D-style sequence so one fill/stroke renders the whole body.
+  function drawSilhouette(ctx) {
+    ctx.beginPath();
+    // head
+    ctx.moveTo(115, 24);
+    ctx.ellipse(100, 24, 15, 18, 0, 0, Math.PI * 2);
+    // neck
+    ctx.moveTo(92, 38); ctx.lineTo(108, 38); ctx.lineTo(106, 50); ctx.lineTo(94, 50); ctx.closePath();
+    // torso: shoulders -> tapered waist -> hips
+    ctx.moveTo(58, 56);
+    ctx.bezierCurveTo(70, 46, 130, 46, 142, 56);
+    ctx.bezierCurveTo(138, 80, 134, 96, 124, 112);
+    ctx.bezierCurveTo(130, 128, 130, 142, 122, 154);
+    ctx.lineTo(78, 154);
+    ctx.bezierCurveTo(70, 142, 70, 128, 76, 112);
+    ctx.bezierCurveTo(66, 96, 62, 80, 58, 56);
+    ctx.closePath();
+    // left arm (upper arm tapering into forearm)
+    ctx.moveTo(58, 58);
+    ctx.bezierCurveTo(46, 66, 38, 82, 36, 100);
+    ctx.bezierCurveTo(34, 118, 34, 136, 36, 154);
+    ctx.lineTo(48, 154);
+    ctx.bezierCurveTo(47, 136, 48, 118, 50, 102);
+    ctx.bezierCurveTo(52, 86, 58, 72, 68, 60);
+    ctx.closePath();
+    // right arm (mirrored)
+    ctx.moveTo(142, 58);
+    ctx.bezierCurveTo(154, 66, 162, 82, 164, 100);
+    ctx.bezierCurveTo(166, 118, 166, 136, 164, 154);
+    ctx.lineTo(152, 154);
+    ctx.bezierCurveTo(153, 136, 152, 118, 150, 102);
+    ctx.bezierCurveTo(148, 86, 142, 72, 132, 60);
+    ctx.closePath();
+    // left leg
+    ctx.moveTo(78, 154);
+    ctx.bezierCurveTo(74, 180, 72, 210, 74, 240);
+    ctx.bezierCurveTo(75, 260, 76, 280, 78, 298);
+    ctx.lineTo(92, 298);
+    ctx.bezierCurveTo(91, 280, 90, 258, 90, 236);
+    ctx.bezierCurveTo(90, 208, 90, 182, 92, 160);
+    ctx.closePath();
+    // right leg (mirrored)
+    ctx.moveTo(122, 154);
+    ctx.bezierCurveTo(126, 180, 128, 210, 126, 240);
+    ctx.bezierCurveTo(125, 260, 124, 280, 122, 298);
+    ctx.lineTo(108, 298);
+    ctx.bezierCurveTo(109, 280, 110, 258, 110, 236);
+    ctx.bezierCurveTo(110, 208, 110, 182, 108, 160);
+    ctx.closePath();
+  }
 
   function drawBody(ctx, offsetX, offsetY, zones, highlightSet, label) {
     ctx.save(); ctx.translate(offsetX, offsetY);
-    ctx.fillStyle = "#67796F"; ctx.font = "11px monospace"; ctx.textAlign = "center";
-    ctx.fillText(label, 100, -8);
-    // head + soft body silhouette
-    ctx.fillStyle = "rgba(255,255,255,0.03)"; ctx.strokeStyle = "#2A3830"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(100, 26, 17, 20, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(60, 300);
-    ctx.bezierCurveTo(50, 220, 55, 150, 70, 100);
-    ctx.bezierCurveTo(60, 80, 65, 55, 100, 50);
-    ctx.bezierCurveTo(135, 55, 140, 80, 130, 100);
-    ctx.bezierCurveTo(145, 150, 150, 220, 140, 300);
-    ctx.lineTo(60, 300); ctx.closePath();
-    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#67796F"; ctx.font = "600 11px monospace"; ctx.textAlign = "center";
+    ctx.fillText(label, 100, -10);
+
+    // soft shaded silhouette (dark at the edges, lighter through the middle for a rounded, 3D feel)
+    var bodyGrad = ctx.createLinearGradient(34, 0, 166, 0);
+    bodyGrad.addColorStop(0, "#171E1A");
+    bodyGrad.addColorStop(0.5, "#3A4740");
+    bodyGrad.addColorStop(1, "#171E1A");
+
+    drawSilhouette(ctx);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+    ctx.strokeStyle = "#232E28"; ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // targeted-muscle zones: soft glowing green blobs for worked muscles, barely-visible for the rest
     zones.forEach(function(z) {
       var on = highlightSet.has(z.muscle);
-      ctx.beginPath(); ctx.ellipse(z.cx, z.cy, z.rx, z.ry, 0, 0, Math.PI*2);
-      ctx.fillStyle = on ? "rgba(74,222,128,0.6)" : "rgba(255,255,255,0.02)";
-      ctx.strokeStyle = on ? "#4ADE80" : "rgba(255,255,255,0.06)";
-      ctx.lineWidth = on ? 2 : 1;
-      ctx.fill(); ctx.stroke();
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(z.cx, z.cy, z.rx, z.ry, 0, 0, Math.PI * 2);
+      if (on) {
+        ctx.shadowColor = "rgba(74,222,128,0.85)";
+        ctx.shadowBlur = 16;
+        var glow = ctx.createRadialGradient(z.cx, z.cy, 1, z.cx, z.cy, Math.max(z.rx, z.ry));
+        glow.addColorStop(0, "rgba(180,255,205,0.95)");
+        glow.addColorStop(0.55, "rgba(74,222,128,0.8)");
+        glow.addColorStop(1, "rgba(74,222,128,0.05)");
+        ctx.fillStyle = glow;
+      } else {
+        ctx.fillStyle = "rgba(255,255,255,0.015)";
+      }
+      ctx.fill();
+      ctx.restore();
     });
+
     ctx.restore();
   }
 
